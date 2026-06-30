@@ -154,6 +154,57 @@ def test_cronjob_tool_update_toggles_no_agent(hermes_env):
     assert on["job"]["no_agent"] is True
 
 
+def test_cronjob_tool_create_roundtrips_attach_to_session(hermes_env):
+    from cron.jobs import load_jobs
+    from tools.cronjob_tools import cronjob
+
+    script_path = hermes_env / "scripts" / "mirror.py"
+    script_path.write_text("print('ok')\n")
+
+    created = json.loads(
+        cronjob(
+            action="create",
+            schedule="every 5m",
+            script="mirror.py",
+            no_agent=True,
+            deliver="origin",
+            attach_to_session=True,
+        )
+    )
+    assert created["success"] is True
+    assert created["job"]["attach_to_session"] is True
+
+    stored = [j for j in load_jobs() if j["id"] == created["job_id"]][0]
+    assert stored["attach_to_session"] is True
+
+
+def test_cronjob_tool_update_roundtrips_attach_to_session_false(hermes_env):
+    from cron.jobs import load_jobs
+    from tools.cronjob_tools import cronjob
+
+    script_path = hermes_env / "scripts" / "mirror.py"
+    script_path.write_text("print('ok')\n")
+
+    created = json.loads(
+        cronjob(
+            action="create",
+            schedule="every 5m",
+            script="mirror.py",
+            no_agent=True,
+            deliver="origin",
+            attach_to_session=True,
+        )
+    )
+    job_id = created["job_id"]
+
+    updated = json.loads(cronjob(action="update", job_id=job_id, attach_to_session=False))
+    assert updated["success"] is True
+    assert updated["job"]["attach_to_session"] is False
+
+    stored = [j for j in load_jobs() if j["id"] == job_id][0]
+    assert stored["attach_to_session"] is False
+
+
 def test_cronjob_tool_update_no_agent_without_script_errors(hermes_env):
     """Flipping no_agent=True on a job that has no script must fail."""
     from tools.cronjob_tools import cronjob

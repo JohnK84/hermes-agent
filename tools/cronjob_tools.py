@@ -514,6 +514,8 @@ def _format_job(job: Dict[str, Any]) -> Dict[str, Any]:
         result["script"] = job["script"]
     if job.get("no_agent"):
         result["no_agent"] = True
+    if "attach_to_session" in job and job.get("attach_to_session") is not None:
+        result["attach_to_session"] = bool(job.get("attach_to_session"))
     if job.get("enabled_toolsets"):
         result["enabled_toolsets"] = job["enabled_toolsets"]
     if job.get("workdir"):
