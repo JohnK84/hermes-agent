@@ -2392,6 +2392,68 @@ def test_run_conversation_codex_disables_reasoning_replay_after_invalid_encrypte
     assert agent._codex_reasoning_replay_enabled is False
 
 
+def test_run_conversation_codex_disables_reasoning_replay_after_invalid_prompt_block(monkeypatch):
+    """Codex can mint a reasoning blob that it rejects on the next replay.
+
+    The live backend mislabels this same-endpoint replay failure as
+    ``invalid_prompt`` / ``Request blocked.`` rather than
+    ``invalid_encrypted_content``.  With replay state present, retry once
+    without encrypted reasoning so the session remains usable.
+    """
+    agent = _build_agent(monkeypatch)
+    agent.provider = "openai-codex"
+    agent.base_url = "https://chatgpt.com/backend-api/codex"
+
+    request_payloads = []
+
+    class _InvalidPromptBlockError(Exception):
+        def __init__(self):
+            super().__init__("Request blocked.")
+            self.status_code = 400
+            self.code = "invalid_prompt"
+            self.type = "invalid_request_error"
+            self.body = {
+                "message": "Request blocked.",
+                "type": "invalid_request_error",
+                "param": None,
+                "code": "invalid_prompt",
+            }
+
+    responses = [_InvalidPromptBlockError(), _codex_message_response("Recovered without replay.")]
+
+    def _fake_api_call(api_kwargs):
+        request_payloads.append(api_kwargs)
+        current = responses.pop(0)
+        if isinstance(current, Exception):
+            raise current
+        return current
+
+    monkeypatch.setattr(agent, "_interruptible_api_call", _fake_api_call)
+
+    history = [
+        {
+            "role": "assistant",
+            "content": "",
+            "finish_reason": "incomplete",
+            "codex_reasoning_items": [
+                {"type": "reasoning", "id": "rs_001", "encrypted_content": "enc_self_poisoned", "summary": []},
+            ],
+        }
+    ]
+
+    result = agent.run_conversation("continue", conversation_history=history)
+
+    assert result["completed"] is True
+    assert result["final_response"] == "Recovered without replay."
+    assert len(request_payloads) == 2
+    assert any(item.get("type") == "reasoning" for item in request_payloads[0]["input"])
+    assert not any(item.get("type") == "reasoning" for item in request_payloads[1]["input"])
+    assert request_payloads[0].get("include") == ["reasoning.encrypted_content"]
+    assert request_payloads[1].get("include") == []
+    assert result["messages"][0].get("codex_reasoning_items") is None
+    assert agent._codex_reasoning_replay_enabled is False
+
+
 def test_run_conversation_codex_invalid_encrypted_content_without_replay_state_does_not_disable_replay(monkeypatch):
     agent = _build_agent(monkeypatch)
     agent.provider = "custom"

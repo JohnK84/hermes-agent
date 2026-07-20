@@ -2640,20 +2640,33 @@ def run_conversation(
 
                 # ── Invalid encrypted reasoning replay recovery ───────
                 # OpenAI Responses API surfaces (and some compatible relays)
-                # return HTTP 400 ``invalid_encrypted_content`` when a
-                # replayed ``codex_reasoning_items`` blob from a previous
-                # turn fails verification (provider rotated the encryption
-                # key, the route doesn't actually persist reasoning state,
-                # etc.).  Recovery: disable replay for the rest of the
-                # session, strip cached items from history, retry once.
+                # normally return HTTP 400 ``invalid_encrypted_content`` when
+                # a replayed ``codex_reasoning_items`` blob from a previous
+                # turn fails verification.  The ChatGPT Codex backend can also
+                # mint a reasoning blob that it rejects on the next request as
+                # ``invalid_prompt`` / ``Request blocked.``.  Treat that narrow
+                # same-provider shape as replay rejection too: disable replay
+                # for the rest of the session, strip cached items from history,
+                # and retry once.
                 # One-shot — if a second 400 fires we fall through to the
                 # normal retry/backoff path.  Only fires for codex_responses
                 # mode with at least one assistant message that has cached
-                # ``codex_reasoning_items``; without replay state, the
-                # error is unrelated to our cache so the normal retry path
-                # handles it (the provider is rejecting something else).
+                # ``codex_reasoning_items``; without replay state, the error is
+                # unrelated to our cache so the normal error path handles it.
+                _codex_invalid_prompt_replay_block = (
+                    classified.reason in {
+                        FailoverReason.format_error,
+                        FailoverReason.content_policy_blocked,
+                    }
+                    and (getattr(agent, "provider", "") or "").lower() == "openai-codex"
+                    and (getattr(api_error, "code", "") or "").lower() == "invalid_prompt"
+                    and "request blocked" in str(api_error).lower()
+                )
                 if (
-                    classified.reason == FailoverReason.invalid_encrypted_content
+                    (
+                        classified.reason == FailoverReason.invalid_encrypted_content
+                        or _codex_invalid_prompt_replay_block
+                    )
                     and not _retry.invalid_encrypted_content_retry_attempted
                     and agent.api_mode == "codex_responses"
                     and bool(getattr(agent, "_codex_reasoning_replay_enabled", True))
