@@ -78,6 +78,7 @@ class ClassifiedError:
     provider: Optional[str] = None
     model: Optional[str] = None
     message: str = ""
+    error_code: str = ""
     error_context: Dict[str, Any] = field(default_factory=dict)
 
     # Recovery action hints — the retry loop checks these instead of
@@ -565,6 +566,7 @@ def classify_api_error(
             "provider": provider,
             "model": model,
             "message": _extract_message(error, body),
+            "error_code": error_code or str(getattr(error, "code", "") or "").strip(),
         }
         defaults.update(overrides)
         return ClassifiedError(**defaults)

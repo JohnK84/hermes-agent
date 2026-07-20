@@ -2659,8 +2659,8 @@ def run_conversation(
                         FailoverReason.content_policy_blocked,
                     }
                     and (getattr(agent, "provider", "") or "").lower() == "openai-codex"
-                    and (getattr(api_error, "code", "") or "").lower() == "invalid_prompt"
-                    and "request blocked" in str(api_error).lower()
+                    and (classified.error_code or "").lower() == "invalid_prompt"
+                    and "request blocked" in (classified.message or "").lower()
                 )
                 if (
                     (

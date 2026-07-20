@@ -2408,15 +2408,16 @@ def test_run_conversation_codex_disables_reasoning_replay_after_invalid_prompt_b
 
     class _InvalidPromptBlockError(Exception):
         def __init__(self):
-            super().__init__("Request blocked.")
+            super().__init__("Error code: 400 - invalid request")
             self.status_code = 400
-            self.code = "invalid_prompt"
             self.type = "invalid_request_error"
             self.body = {
-                "message": "Request blocked.",
-                "type": "invalid_request_error",
-                "param": None,
-                "code": "invalid_prompt",
+                "error": {
+                    "message": "Request blocked.",
+                    "type": "invalid_request_error",
+                    "param": None,
+                    "code": "invalid_prompt",
+                }
             }
 
     responses = [_InvalidPromptBlockError(), _codex_message_response("Recovered without replay.")]
